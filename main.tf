@@ -48,10 +48,6 @@ resource "aws_ecs_cluster" "servian_cluster" {
   }
 }
 
-// resource "aws_ecs_cluster_capacity_providers" "servian_cap" {
-//   
-// }
-
 resource "aws_ecs_task_definition" "gtd_task" {
   family = "gtd-task"
   requires_compatibilities = ["FARGATE"]
@@ -100,7 +96,7 @@ resource "aws_ecs_service" "app" {
   network_configuration {
     subnets = data.aws_subnets.default.ids
     assign_public_ip = true
-    security_groups = data.aws_security_groups.default.ids
+    security_groups = [aws_security_group.gtd_sg.id]
   }
 
 }
