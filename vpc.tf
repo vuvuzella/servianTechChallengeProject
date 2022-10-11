@@ -13,3 +13,11 @@ data "aws_subnets" "default" {
     values = [local.vpc_id]
   }
 }
+
+// TODO: create own security group with allow traffic
+data "aws_security_groups" "default" {
+  filter {
+    name = "vpc-id"
+    values = [local.vpc_id]
+  }
+}

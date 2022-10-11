@@ -30,9 +30,22 @@ resource "aws_iam_role" "gtd_role" {
   assume_role_policy = data.aws_iam_policy_document.assume_role_policy.json
 }
 
+resource "aws_cloudwatch_log_group" "gtd_logs" {
+  name = "gtd-logs"
+}
+
 //TODO: ECS + Fargate to deploy the container app
 resource "aws_ecs_cluster" "servian_cluster" {
   name = "servian"
+
+  configuration {
+    execute_command_configuration {
+      logging = "OVERRIDE"
+      log_configuration {
+        cloud_watch_log_group_name = aws_cloudwatch_log_group.gtd_logs.name
+      }
+    }
+  }
 }
 
 // resource "aws_ecs_cluster_capacity_providers" "servian_cap" {
@@ -40,12 +53,11 @@ resource "aws_ecs_cluster" "servian_cluster" {
 // }
 
 resource "aws_ecs_task_definition" "gtd_task" {
-  family = "gtd-task-definition"
+  family = "gtd-task"
   requires_compatibilities = ["FARGATE"]
   cpu = 1024
   memory = 2048
   network_mode = "awsvpc"
-  // TODO: fill in the container definition including the image
   container_definitions = jsonencode(
   [
     {
@@ -58,21 +70,24 @@ resource "aws_ecs_task_definition" "gtd_task" {
         {
           containerPort = 3000
           hostPort = 3000
-        },
-        {
-          containerPort = 5432
-          hostPort = 5432
         }
       ]
+      command = ["serve"]
+      disableNetworking = false
+      environment = [
+        {
+          name = "VTT_LISTENHOST"
+          value = "0.0.0.0"
+        }
+      ]
+
     }
   ])
   execution_role_arn = aws_iam_role.gtd_role.arn
-
-  // TODO: is this needed?
-  # runtime_platform {
-  #   cpu_architecture = "X86_64"
-  #   operating_system_family = "LINUX"
-  # }
+  runtime_platform {
+    cpu_architecture = "X86_64"
+    operating_system_family = "LINUX"
+  }
 }
 
 resource "aws_ecs_service" "app" {
@@ -85,21 +100,9 @@ resource "aws_ecs_service" "app" {
   network_configuration {
     subnets = data.aws_subnets.default.ids
     assign_public_ip = true
+    security_groups = data.aws_security_groups.default.ids
   }
 
-
-  // TODO: understand what this does
-  # ordered_placement_strategy {
-  #   type = "binpack"
-  #   field = "cpu"
-  # }
-
-  // TODO: do I need a load balancer?
-  # load_balancer {
-  #   target_group_arn = ""
-  #   container_name = "" // TODO: name of the container
-  #   container_port = "" // 
-  # }
 }
 
 // database
