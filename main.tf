@@ -11,7 +11,11 @@ terraform {
 
 provider "aws" {
   region = "ap-southeast-2"
-  profile = "admin-dev" // TODO: set default profile to use?
+}
+
+locals {
+  serve_task_name = "gtd-task"
+  update_task_name = "updatedb-task"
 }
 
 resource "aws_kms_key" "key" {
@@ -39,7 +43,7 @@ resource "aws_ecs_cluster" "servian_cluster" {
 }
 
 resource "aws_ecs_task_definition" "gtd_task" {
-  family = "gtd-task"
+  family = local.serve_task_name
   requires_compatibilities = ["FARGATE"]
   cpu = 1024
   memory = 2048
@@ -67,19 +71,19 @@ resource "aws_ecs_task_definition" "gtd_task" {
       environment =  [
         {
           name = "VTT_DBUSER"
-          value = local.db_username
+          value = var.db_username
         },
         {
           name = "VTT_DBPASSWORD"
-          value = local.db_password
+          value = var.db_password
         },
         {
           name = "VTT_DBNAME"
-          value = local.db_name
+          value = var.db_name
         },
         {
           name = "VTT_DBPORT"
-          value = local.db_port
+          value = var.db_port
         },
         {
           name = "VTT_DBHOST"
@@ -87,15 +91,15 @@ resource "aws_ecs_task_definition" "gtd_task" {
         },
         {
           name = "VTT_DBTYPE"
-          value = local.db_type
+          value = var.db_type
         },
         {
           name = "VTT_LISTENHOST"
-          value = local.app_listen_host
+          value = var.app_listen_host
         },
         {
           name = "VTT_LISTENPORT"
-          value = local.app_listen_port
+          value = var.app_listen_port
         }
       ]
       logConfiguration = {
@@ -117,7 +121,7 @@ resource "aws_ecs_task_definition" "gtd_task" {
 }
 
 resource "aws_ecs_task_definition" "updatedb_task" {
-  family = "updatedb-task"
+  family = local.update_task_name
   requires_compatibilities = ["FARGATE"]
   cpu = 1024
   memory = 2048
@@ -145,19 +149,19 @@ resource "aws_ecs_task_definition" "updatedb_task" {
       environment =  [
         {
           name = "VTT_DBUSER"
-          value = local.db_username
+          value = var.db_username
         },
         {
           name = "VTT_DBPASSWORD"
-          value = local.db_password
+          value = var.db_password
         },
         {
           name = "VTT_DBNAME"
-          value = local.db_name
+          value = var.db_name
         },
         {
           name = "VTT_DBPORT"
-          value = local.db_port
+          value = var.db_port
         },
         {
           name = "VTT_DBHOST"
@@ -165,15 +169,15 @@ resource "aws_ecs_task_definition" "updatedb_task" {
         },
         {
           name = "VTT_DBTYPE"
-          value = local.db_type
+          value = var.db_type
         },
         {
           name = "VTT_LISTENHOST"
-          value = local.app_listen_host
+          value = var.app_listen_host
         },
         {
           name = "VTT_LISTENPORT"
-          value = local.app_listen_port
+          value = var.app_listen_port
         }
       ]
       logConfiguration = {
@@ -224,5 +228,19 @@ resource "null_resource" "bootstrap" {
     aws_db_instance.postgresql,
     aws_ecs_cluster.servian_cluster,
     aws_ecs_task_definition.updatedb_task
+  ]
+}
+
+resource "null_resource" "get_app_address" {
+
+  triggers = {
+    ids = timestamp()
+  }
+  provisioner "local-exec" {
+    command = "chmod +x ./get_gtd_ip.sh && ./get_gtd_ip.sh ${aws_ecs_service.app.name} ${aws_ecs_cluster.servian_cluster.name} ${var.app_listen_port}"
+  }
+
+  depends_on = [
+    null_resource.bootstrap
   ]
 }
