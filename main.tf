@@ -83,7 +83,7 @@ resource "aws_ecs_task_definition" "gtd_task" {
         },
         {
           name = "VTT_DBHOST"
-          value = aws_db_instance.postgresql.endpoint
+          value = split(":", aws_db_instance.postgresql.endpoint)[0]
         },
         {
           name = "VTT_DBTYPE"
@@ -161,7 +161,7 @@ resource "aws_ecs_task_definition" "updatedb_task" {
         },
         {
           name = "VTT_DBHOST"
-          value = aws_db_instance.postgresql.endpoint
+          value = split(":", aws_db_instance.postgresql.endpoint)[0]
         },
         {
           name = "VTT_DBTYPE"
