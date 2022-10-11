@@ -14,7 +14,7 @@ resource "aws_security_group" "gtd_sg" {
     from_port = 5432
     to_port = 5432
     protocol = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]  // TODO: get vpc cidr block of default
+    cidr_blocks = [aws_default_vpc.default.cidr_block]  // TODO: get vpc cidr block of default
     ipv6_cidr_blocks = ["::/0"]
   }
 

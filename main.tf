@@ -187,6 +187,7 @@ resource "aws_ecs_task_definition" "updatedb_task" {
     }
   ])
   execution_role_arn = aws_iam_role.gtd_execution_role.arn
+  task_role_arn = aws_iam_role.gtd_execution_role.arn
 
   runtime_platform {
     cpu_architecture = "X86_64"
@@ -194,7 +195,6 @@ resource "aws_ecs_task_definition" "updatedb_task" {
   }
   
 }
-
 
 resource "aws_ecs_service" "app" {
   name = "gtd-app"
@@ -211,4 +211,18 @@ resource "aws_ecs_service" "app" {
 
 }
 
-// database
+// After everything has been deployed, manually run updatedb to create the schema and seed the table
+resource "null_resource" "bootstrap" {
+  triggers = {
+    ids = timestamp()
+  }
+  provisioner "local-exec" {
+    command = "aws ecs run-task --cluster ${aws_ecs_cluster.servian_cluster.name} --task-definition ${aws_ecs_task_definition.updatedb_task.arn} --launch-type FARGATE --platform-version '1.4.0' --network-configuration awsvpcConfiguration={subnets=[${join(",", data.aws_subnets.default.ids)}],securityGroups=[${aws_security_group.gtd_sg.id}],assignPublicIp=ENABLED}"
+  }
+
+  depends_on = [
+    aws_db_instance.postgresql,
+    aws_ecs_cluster.servian_cluster,
+    aws_ecs_task_definition.updatedb_task
+  ]
+}
