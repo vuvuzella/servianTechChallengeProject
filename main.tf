@@ -9,39 +9,29 @@ terraform {
   } 
 }
 
-// TODO: set remote state. maybe not required?
 provider "aws" {
   region = "ap-southeast-2"
   profile = "admin-dev" // TODO: set default profile to use?
 }
 
-data "aws_iam_policy_document" "assume_role_policy" {
-  statement {
-    actions = ["sts:AssumeRole"]
-    principals {
-      type = "Service"
-      identifiers = ["ecs-tasks.amazonaws.com"]
-    }
-  }
-}
-
-resource "aws_iam_role" "gtd_role" {
-  name = "gtdECSTaskExecutionRole"
-  assume_role_policy = data.aws_iam_policy_document.assume_role_policy.json
+resource "aws_kms_key" "key" {
+  description             = "key"
+  deletion_window_in_days = 7
 }
 
 resource "aws_cloudwatch_log_group" "gtd_logs" {
   name = "gtd-logs"
 }
 
-//TODO: ECS + Fargate to deploy the container app
 resource "aws_ecs_cluster" "servian_cluster" {
   name = "servian"
 
   configuration {
     execute_command_configuration {
+      kms_key_id = aws_kms_key.key.arn
       logging = "OVERRIDE"
       log_configuration {
+        cloud_watch_encryption_enabled = true
         cloud_watch_log_group_name = aws_cloudwatch_log_group.gtd_logs.name
       }
     }
@@ -66,25 +56,145 @@ resource "aws_ecs_task_definition" "gtd_task" {
         {
           containerPort = 3000
           hostPort = 3000
+        },
+        {
+          containerPort = 5432
+          hostPort = 5432
         }
       ]
       command = ["serve"]
       disableNetworking = false
-      environment = [
+      environment =  [
+        {
+          name = "VTT_DBUSER"
+          value = local.db_username
+        },
+        {
+          name = "VTT_DBPASSWORD"
+          value = local.db_password
+        },
+        {
+          name = "VTT_DBNAME"
+          value = local.db_name
+        },
+        {
+          name = "VTT_DBPORT"
+          value = local.db_port
+        },
+        {
+          name = "VTT_DBHOST"
+          value = aws_db_instance.postgresql.endpoint
+        },
+        {
+          name = "VTT_DBTYPE"
+          value = local.db_type
+        },
         {
           name = "VTT_LISTENHOST"
-          value = "0.0.0.0"
+          value = local.app_listen_host
+        },
+        {
+          name = "VTT_LISTENPORT"
+          value = local.app_listen_port
         }
       ]
-
+      logConfiguration = {
+          logDriver = "awslogs"
+          options = {
+            awslogs-region = "ap-southeast-2"
+            awslogs-group = aws_cloudwatch_log_group.gtd_logs.name
+            awslogs-stream-prefix = "gtd-app"
+          }
+      }
     }
   ])
-  execution_role_arn = aws_iam_role.gtd_role.arn
+  execution_role_arn = aws_iam_role.gtd_execution_role.arn
+
   runtime_platform {
     cpu_architecture = "X86_64"
     operating_system_family = "LINUX"
   }
 }
+
+resource "aws_ecs_task_definition" "updatedb_task" {
+  family = "updatedb-task"
+  requires_compatibilities = ["FARGATE"]
+  cpu = 1024
+  memory = 2048
+  network_mode = "awsvpc"
+  container_definitions = jsonencode(
+  [
+    {
+      name = "gtd-docker-image"
+      image = "servian/techchallengeapp:latest"
+      essential = true
+      memory = 1024
+      cpu = 512
+      portMappings = [
+        {
+          containerPort = 3000
+          hostPort = 3000
+        },
+        {
+          containerPort = 5432
+          hostport = 5432
+        }
+      ]
+      command = ["updatedb", "-s"]
+      disableNetworking = false
+      environment =  [
+        {
+          name = "VTT_DBUSER"
+          value = local.db_username
+        },
+        {
+          name = "VTT_DBPASSWORD"
+          value = local.db_password
+        },
+        {
+          name = "VTT_DBNAME"
+          value = local.db_name
+        },
+        {
+          name = "VTT_DBPORT"
+          value = local.db_port
+        },
+        {
+          name = "VTT_DBHOST"
+          value = aws_db_instance.postgresql.endpoint
+        },
+        {
+          name = "VTT_DBTYPE"
+          value = local.db_type
+        },
+        {
+          name = "VTT_LISTENHOST"
+          value = local.app_listen_host
+        },
+        {
+          name = "VTT_LISTENPORT"
+          value = local.app_listen_port
+        }
+      ]
+      logConfiguration = {
+          logDriver = "awslogs"
+          options = {
+            awslogs-region = "ap-southeast-2"
+            awslogs-group = aws_cloudwatch_log_group.gtd_logs.name
+            awslogs-stream-prefix = "updatedb"
+          }
+      }
+    }
+  ])
+  execution_role_arn = aws_iam_role.gtd_execution_role.arn
+
+  runtime_platform {
+    cpu_architecture = "X86_64"
+    operating_system_family = "LINUX"
+  }
+  
+}
+
 
 resource "aws_ecs_service" "app" {
   name = "gtd-app"
