@@ -22,6 +22,7 @@
   * create a separate VPC
   * VPC can n-tier and distribute the database and web app
   * Security can be improved by avoiding a star/asterisk value on the iam policies
+  * Could have utilized Terraform modules to improve codebase
 
 ### CICD
 
